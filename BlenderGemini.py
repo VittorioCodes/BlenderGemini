@@ -6,172 +6,198 @@ import json
 
 bl_info = {
     "name": "Blender Gemini",
-    "author": "https://github.com/VittorioCodes", # Buraya GitHub kullanıcı adınızı veya isminizi yazabilirsiniz
-    "version": (1, 0),
+    "author": "VittorioCodes",
+    "version": (1, 1, 0),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > Gemini AI",
-    "description": "Built-in API supported Gemini AI integration for Blender",
+    "description": "State-aware AI Assistant inside Blender",
     "category": "Interface",
 }
 
-# ==========================================
-# API SETTING FOR GITHUB & PERSONAL USE
-# For personal use, enter your own API key here.
-# When uploading to Github, leave this as "ENTER_YOUR_API_KEY_HERE".
-# ==========================================
 DEFAULT_API_KEY = "ENTER_YOUR_API_KEY_HERE"
 
+# --- System Instruction ---
+SYSTEM_PROMPT = (
+    "You are an AI assistant running inside Blender, integrated via an add-on developed by https://github.com/VittorioCodes. "
+    "You are helping a 3D artist. You must always assume: "
+    "- The user is working inside Blender. "
+    "- Solutions must be Blender-specific. "
+    "- If code is provided, it must be valid 'bpy' Python code. "
+    "- Prefer practical steps and direct solutions over theory. "
+    "- Ask for clarification only if absolutely necessary. "
+    "While you specialize in Blender modeling, scripting, and rendering, do not limit your knowledge strictly to Blender; "
+    "remain a versatile assistant, but always prioritize the context of the 3D workflow."
+)
+
+# --- Helper Function: Scene Snapshot ---
+def get_blender_context_info(context, props):
+    """Gathers current Blender state to provide context for the AI."""
+    info = ["--- BLENDER CONTEXT ---"]
+    
+    if props.ctx_scene:
+        info.append(f"Blender Version: {bpy.app.version_string}")
+        info.append(f"Render Engine: {context.scene.render.engine}")
+        info.append(f"Current Mode: {context.mode}")
+    
+    obj = context.active_object
+    if obj and props.ctx_object:
+        info.append(f"Active Object: {obj.name} (Type: {obj.type})")
+        info.append(f"Location: {obj.location}")
+        
+        if obj.type == 'MESH':
+            info.append(f"Geometry: {len(obj.data.vertices)} verts, {len(obj.data.polygons)} faces")
+            if props.ctx_modifiers:
+                mods = [m.name for m in obj.modifiers]
+                info.append(f"Modifiers: {mods if mods else 'None'}")
+            if props.ctx_materials:
+                mats = [slot.material.name for slot in obj.material_slots if slot.material]
+                info.append(f"Materials: {mats if mats else 'None'}")
+                
+    info.append("--- END OF CONTEXT ---")
+    return "\n".join(info)
 
 # --- Data Structures ---
-class GeminiMessage(bpy.types.PropertyGroup):
+class GEMINI_STR_Message(bpy.types.PropertyGroup):
     role: bpy.props.StringProperty()
     content: bpy.props.StringProperty()
 
-class GeminiSettings(bpy.types.PropertyGroup):
-    # FREE MODELS (Dropdown)
+class GEMINI_STR_Settings(bpy.types.PropertyGroup):
     free_model_enum: bpy.props.EnumProperty(
         name="Free Model",
-        description="Models suitable for Free Tier API limits",
         items=[
-            ("gemini-2.5-flash", "Gemini 2.5 Flash", "Most balanced and updated free model"),
-            ("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite", "Faster and lightweight model"),
-            ("gemini-1.5-flash", "Gemini 1.5 Flash", "Previous generation fast model"),
+            ("gemini-2.5-flash", "Gemini 2.5 Flash", ""),
+            ("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite", ""),
+            ("gemini-1.5-flash", "Gemini 1.5 Flash", ""),
         ],
         default="gemini-2.5-flash"
     )
 
-    # PAID (PRO) MODELS (Dropdown)
     paid_model_enum: bpy.props.EnumProperty(
         name="Pro Model",
-        description="Pro models for billed API keys",
         items=[
-            ("gemini-2.5-pro", "Gemini 2.5 Pro", "Most advanced reasoning model"),
-            ("gemini-1.5-pro", "Gemini 1.5 Pro", "Previous generation pro model"),
-            ("custom", "Custom Model...", "Manually enter a new model not in the list"),
+            ("gemini-2.5-pro", "Gemini 2.5 Pro", ""),
+            ("gemini-1.5-pro", "Gemini 1.5 Pro", ""),
+            ("custom", "Custom Model...", ""),
         ],
         default="gemini-2.5-pro"
     )
 
-    use_paid_tier: bpy.props.BoolProperty(
-        name="Use Paid (Pro) API",
-        description="Check this if you are using a billed API key and a Pro model",
-        default=False
-    )
-
-    custom_api_key: bpy.props.StringProperty(
-        name="Pro API Key", 
-        subtype='PASSWORD',
-        description="Your API key for paid models"
-    )
+    use_paid_tier: bpy.props.BoolProperty(name="Paid API Mode", default=False)
+    custom_api_key: bpy.props.StringProperty(name="API Key", subtype='PASSWORD')
+    custom_model_name: bpy.props.StringProperty(name="Model ID", default="gemini-2.0-pro-exp")
     
-    custom_model_name: bpy.props.StringProperty(
-        name="Custom Model ID", 
-        default="gemini-2.0-pro-exp",
-        description="e.g., gemini-2.0-pro-exp"
-    )
+    ctx_scene: bpy.props.BoolProperty(name="Scene Data", default=True)
+    ctx_object: bpy.props.BoolProperty(name="Active Object", default=True)
+    ctx_modifiers: bpy.props.BoolProperty(name="Modifiers", default=False)
+    ctx_materials: bpy.props.BoolProperty(name="Materials", default=False)
 
-    user_input: bpy.props.StringProperty(name="", description="Type your message...")
-    chat_history: bpy.props.CollectionProperty(type=GeminiMessage)
+    is_primed: bpy.props.BoolProperty(name="Is Primed", default=False)
+    user_input: bpy.props.StringProperty(name="", description="Type your message here")
+    chat_history: bpy.props.CollectionProperty(type=GEMINI_STR_Message)
 
-# --- The Logic ---
-class GEMINI_OT_SendMessage(bpy.types.Operator):
-    bl_idname = "gemini.send_message"
-    bl_label = "Send"
+# --- Operators ---
+
+class GEMINI_OT_WarmStart(bpy.types.Operator):
+    """Silent handshake with AI to initialize the session"""
+    bl_idname = "gemini.warm_start"
+    bl_label = "Initialize Assistant"
+    bl_description = "Establish a connection with Gemini and prime the AI context"
 
     def execute(self, context):
         props = context.scene.gemini_tool
-        
-        # Determine API Key and Model ID based on the selected mode
-        if props.use_paid_tier:
-            api_key = props.custom_api_key.strip()
-            model_id = props.custom_model_name.strip() if props.paid_model_enum == "custom" else props.paid_model_enum
-        else:
-            api_key = DEFAULT_API_KEY.strip()
-            model_id = props.free_model_enum
+        api_key = props.custom_api_key.strip() if props.use_paid_tier else DEFAULT_API_KEY.strip()
+        model_id = (props.custom_model_name.strip() if props.paid_model_enum == "custom" else props.paid_model_enum) if props.use_paid_tier else props.free_model_enum
 
-        # API Key Validation
         if not api_key or api_key == "ENTER_YOUR_API_KEY_HERE":
-            self.report({'ERROR'}, "Valid API Key not found! Please edit the script or enter a key in Pro mode.")
+            self.report({'ERROR'}, "Missing API Key!")
             return {'CANCELLED'}
 
-        user_text = props.user_input.strip()
-        if not user_text:
-            return {'CANCELLED'}
-
-        # Gather chat history
-        payload_contents = []
-        for m in props.chat_history:
-            payload_contents.append({
-                "role": m.role,
-                "parts": [{"text": m.content}]
-            })
-            
-        # Overwrite if the last request failed (last message is 'user'), otherwise append
-        if payload_contents and payload_contents[-1]["role"] == "user":
-            payload_contents[-1] = {"role": "user", "parts": [{"text": user_text}]}
-        else:
-            payload_contents.append({"role": "user", "parts": [{"text": user_text}]})
-
-        # API Configuration
-        url = f"https://generativelanguage.googleapis.com/v1/models/{model_id}:generateContent?key={api_key}"
-        data = {"contents": payload_contents}
-        data_bytes = json.dumps(data).encode('utf-8')
+        warm_msg = "The assistant has just been initialized inside Blender. No user question yet. Acknowledge silently."
+        # Use v1beta for system_instruction support
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         
-        req = urllib.request.Request(url, data=data_bytes, method='POST')
-        req.add_header('Content-Type', 'application/json')
+        data = {
+            "contents": [{"role": "user", "parts": [{"text": warm_msg}]}],
+            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]}
+        }
 
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_data = response.read()
-                res_json = json.loads(res_data)
-
-                if "candidates" in res_json:
-                    answer = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    
-                    if len(props.chat_history) == 0 or props.chat_history[-1].role != "user":
-                        user_msg = props.chat_history.add()
-                        user_msg.role = "user"
-                        user_msg.content = user_text
-                    else:
-                        props.chat_history[-1].content = user_text
-                    
-                    reply = props.chat_history.add()
-                    reply.role = "model"
-                    reply.content = answer
-                    
-                    props.user_input = ""
-                else:
-                    self.report({'ERROR'}, "Unexpected format in API response.")
-                    
-        except urllib.error.HTTPError as e:
-            error_response = e.read().decode('utf-8')
-            try:
-                err_json = json.loads(error_response)
-                error_msg = err_json.get('error', {}).get('message', 'Unknown Error')
-            except:
-                error_msg = str(e)
-            
-            if "quota" in error_msg.lower() or "limit: 0" in error_response:
-                self.report({'ERROR'}, f"QUOTA ERROR: Model ({model_id}) might be restricted or limit exceeded.")
-            else:
-                self.report({'ERROR'}, f"API Error: {error_msg}")
-            print(f"DEBUG ERROR: {error_response}")
-
+            req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), method='POST')
+            req.add_header('Content-Type', 'application/json')
+            with urllib.request.urlopen(req, timeout=15) as response:
+                props.is_primed = True
+                self.report({'INFO'}, "Gemini AI initialized and ready.")
         except Exception as e:
-            self.report({'ERROR'}, f"Connection Error: {str(e)}")
+            self.report({'ERROR'}, f"Failed to initialize: {str(e)}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+class GEMINI_OT_SendMessage(bpy.types.Operator):
+    bl_idname = "gemini.send_message"
+    bl_label = "SEND"
+    bl_description = "Send message with scene context"
+
+    def execute(self, context):
+        props = context.scene.gemini_tool
+        api_key = props.custom_api_key.strip() if props.use_paid_tier else DEFAULT_API_KEY.strip()
+        model_id = (props.custom_model_name.strip() if props.paid_model_enum == "custom" else props.paid_model_enum) if props.use_paid_tier else props.free_model_enum
+
+        user_text = props.user_input.strip()
+        if not user_text: return {'CANCELLED'}
+
+        context_data = get_blender_context_info(context, props)
+        full_prompt = f"{context_data}\n\nUser Question: {user_text}"
+
+        payload_contents = []
+        for m in props.chat_history:
+            payload_contents.append({"role": m.role, "parts": [{"text": m.content}]})
+        
+        payload_contents.append({"role": "user", "parts": [{"text": full_prompt}]})
+        
+        msg = props.chat_history.add()
+        msg.role = "user"
+        msg.content = user_text
+        props.user_input = ""
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
+        data = {
+            "contents": payload_contents,
+            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]}
+        }
+
+        try:
+            req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), method='POST')
+            req.add_header('Content-Type', 'application/json')
+            with urllib.request.urlopen(req, timeout=30) as response:
+                res_json = json.loads(response.read())
+                answer = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                reply = props.chat_history.add()
+                reply.role = "model"
+                reply.content = answer
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
 
         context.area.tag_redraw()
         return {'FINISHED'}
 
-class GEMINI_OT_ClearChat(bpy.types.Operator):
-    bl_idname = "gemini.clear_chat"
-    bl_label = "Clear"
+class GEMINI_OT_ResetContext(bpy.types.Operator):
+    bl_idname = "gemini.reset_context"
+    bl_label = ""
+    bl_description = "Disable all context awareness"
     def execute(self, context):
-        context.scene.gemini_tool.chat_history.clear()
-        context.scene.gemini_tool.user_input = ""
+        props = context.scene.gemini_tool
+        props.ctx_scene = props.ctx_object = props.ctx_modifiers = props.ctx_materials = False
         return {'FINISHED'}
 
-# --- UI Layout ---
+class GEMINI_OT_ClearChat(bpy.types.Operator):
+    bl_idname = "gemini.clear_chat"
+    bl_label = "Clear History"
+    def execute(self, context):
+        context.scene.gemini_tool.chat_history.clear()
+        return {'FINISHED'}
+
+# --- UI Panel ---
 class GEMINI_PT_Panel(bpy.types.Panel):
     bl_label = "Gemini AI Chat"
     bl_idname = "GEMINI_PT_Panel"
@@ -183,67 +209,83 @@ class GEMINI_PT_Panel(bpy.types.Panel):
         layout = self.layout
         props = context.scene.gemini_tool
 
-        # Settings Section
+        # 1. API Settings
         box = layout.box()
-        
-        # Mode Switcher (Free vs Pro)
-        box.prop(props, "use_paid_tier", icon='PMARKER_SEL')
-        
+        box.prop(props, "use_paid_tier", text="Paid API Mode", icon='SETTINGS')
         if props.use_paid_tier:
-            # PAID USER INTERFACE
-            box.label(text="Pro API Settings", icon='KEYINGSET')
             box.prop(props, "custom_api_key")
-            box.prop(props, "paid_model_enum")
-            
-            # Show text box if "Custom Model" is selected
-            if props.paid_model_enum == "custom":
-                box.prop(props, "custom_model_name")
+            box.prop(props, "paid_model_enum", text="")
         else:
-            # FREE USER INTERFACE (Embedded API)
-            box.label(text="Embedded API Key Active", icon='LOCKED')
-            box.prop(props, "free_model_enum")
-        
+            box.prop(props, "free_model_enum", text="")
+
         layout.separator()
 
-        # Chat Area
-        chat_flow = layout.box()
-        if len(props.chat_history) == 0:
-            chat_flow.label(text="Chat is empty...")
-        
-        for msg in props.chat_history:
-            is_user = msg.role == "user"
-            msg_box = chat_flow.box()
-            msg_box.label(text="You:" if is_user else "Gemini:", icon='USER' if is_user else 'LIGHT')
+        # 2. Warm Start / Chat Interface
+        if not props.is_primed:
+            welcome = layout.box()
+            welcome.label(text="Assistant needs initialization", icon='INFO')
+            row = welcome.row()
+            row.scale_y = 1.5
+            # Fix: Using 'PLAY' instead of 'POWER' for 4.3 compatibility
+            row.operator("gemini.warm_start", icon='PLAY', text="Wake Up Gemini")
+        else:
+            # AI Awareness
+            ctx_box = layout.box()
+            header = ctx_box.row()
+            header.label(text="AI Awareness:", icon='INFO')
+            header.operator("gemini.reset_context", icon='X', emboss=False)
             
-            col = msg_box.column(align=True)
-            wrapper = textwrap.TextWrapper(width=45)
-            for line in msg.content.split('\n'):
-                if not line.strip():
-                    col.label(text="")
-                    continue
-                for w_line in wrapper.wrap(text=line):
-                    col.label(text=w_line)
+            grid = ctx_box.grid_flow(columns=2, align=True, even_columns=True)
+            grid.prop(props, "ctx_scene")
+            grid.prop(props, "ctx_object")
+            grid.prop(props, "ctx_modifiers")
+            grid.prop(props, "ctx_materials")
 
-        # Bottom Input Area
-        layout.separator()
-        layout.prop(props, "user_input", text="")
-        
-        row = layout.row()
-        row.scale_y = 1.5
-        row.operator("gemini.send_message", icon='PLAY', text="SEND")
-        layout.operator("gemini.clear_chat", icon='TRASH', text="Clear Chat")
+            layout.separator()
+
+            # Input
+            input_box = layout.box()
+            input_box.prop(props, "user_input", text="", icon='URL') # 'URL' is safe in 4.3
+            row = input_box.row(align=True)
+            row.scale_y = 1.5
+            row.operator("gemini.send_message", icon='PLAY')
+            row.operator("gemini.clear_chat", icon='TRASH', text="")
+
+            layout.separator()
+
+            # Chat History
+            if len(props.chat_history) == 0:
+                layout.label(text="No messages yet...", icon='INFO')
+            
+            for msg in reversed(props.chat_history):
+                is_user = msg.role == "user"
+                row = layout.row()
+                m_box = row.box()
+                m_box.label(text="You" if is_user else "Gemini", icon='USER' if is_user else 'LIGHT')
+                
+                wrapper = textwrap.TextWrapper(width=42)
+                for line in msg.content.split('\n'):
+                    if not line.strip():
+                        m_box.label(text="")
+                        continue
+                    for w_line in wrapper.wrap(text=line):
+                        m_box.label(text=w_line)
+                layout.separator(factor=0.5)
 
 # --- Registration ---
-classes = (GeminiMessage, GeminiSettings, GEMINI_OT_SendMessage, GEMINI_OT_ClearChat, GEMINI_PT_Panel)
+classes = (
+    GEMINI_STR_Message, GEMINI_STR_Settings, 
+    GEMINI_OT_WarmStart, GEMINI_OT_SendMessage, 
+    GEMINI_OT_ResetContext, GEMINI_OT_ClearChat, 
+    GEMINI_PT_Panel
+)
 
 def register():
-    for cls in classes: 
-        bpy.utils.register_class(cls)
-    bpy.types.Scene.gemini_tool = bpy.props.PointerProperty(type=GeminiSettings)
+    for cls in classes: bpy.utils.register_class(cls)
+    bpy.types.Scene.gemini_tool = bpy.props.PointerProperty(type=GEMINI_STR_Settings)
 
 def unregister():
-    for cls in reversed(classes): 
-        bpy.utils.unregister_class(cls)
+    for cls in reversed(classes): bpy.utils.unregister_class(cls)
     del bpy.types.Scene.gemini_tool
 
 if __name__ == "__main__":
