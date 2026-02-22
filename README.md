@@ -1,90 +1,62 @@
-# 🤖 Blender Gemini
+# 🤖 Blender Gemini AI (v1.1.0)
 
 ![Blender Version](https://img.shields.io/badge/Blender-3.0+-orange.svg)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Gemini API](https://img.shields.io/badge/API-Google_Gemini-blueviolet.svg)
+![Version](https://img.shields.io/badge/Version-1.1.0-green.svg)
 
-**Blender Gemini** is a lightweight, zero-dependency Blender add-on that brings Google's powerful Gemini AI directly into your 3D viewport. 
-
-Whether you need to ask for exact real-world dimensions (e.g., *"What is the standard height of a kitchen counter?"*), get Python (bpy) scripting help, or brainstorm modeling ideas, your AI assistant is now just a click away inside Blender!
-
----
-
-## ✨ Features
-
-- **No External Libraries Required:** Uses Blender's built-in `urllib`. No need to install `requests` or mess with Python environments. Just plug and play!
-- **Free Tier Optimized:** Fully supports Google's Free Tier models. Comes with a built-in dropdown for `gemini-2.5-flash-lite` (offering generous limits like 1,000 requests/day for free users).
-- **Pro & Custom Model Support:** Advanced users can toggle the "Pro Mode" to input billed API keys and use advanced reasoning models like `gemini-2.5-pro` or even type in experimental custom model IDs.
-- **Smart UI:** Neatly wraps text to fit Blender's sidebar, keeps chat history intact, and handles API errors gracefully with built-in pop-up warnings.
-- **Wide Compatibility:** Works seamlessly with Blender 3.0, 3.6 LTS, 4.0, and newer versions.
+**Blender Gemini** is a state-aware AI assistant integrated directly into the Blender 3D Viewport. Unlike standard chat add-ons, it understands your scene's context, helping you model, script, and troubleshoot faster.
 
 ---
 
-## 🛠️ Use Cases for 3D Artists
-* **Real-World Scale:** Ask for exact dimensions of everyday objects to keep your scenes anatomically and proportionally correct.
-* **Material & Lighting Tips:** Ask how to achieve specific PBR material looks or lighting setups.
-* **Blender Python (bpy):** Quickly generate small scripts to automate repetitive tasks.
+## ✨ New in v1.1.0: State-Awareness
+Your AI assistant is no longer blind! It can now see:
+- **Active Object Data:** Name, Type, and Location.
+- **Geometry Stats:** Vertex and Face counts.
+- **Modifier Stack:** List of active modifiers on your object.
+- **Materials:** Applied materials and slots.
+- **Scene Info:** Blender version, Render engine, and current Interaction Mode.
 
 ---
 
-## 🚀 Step-by-Step Installation Guide
+## 🚀 Key Features
 
-Even if you have never used an add-on or an API before, just follow these simple steps:
-
-### Step 1: Get Your Free Gemini API Key
-1. Go to [Google AI Studio](https://aistudio.google.com/).
-2. Sign in with your Google account.
-3. Click on **"Get API key"** (usually on the left menu) and create a new key.
-4. Copy this key. Keep it secret!
-
-### Step 2: Download & Prepare the Add-on
-1. Go to the **[Releases](../../releases/latest)** section on the right side of this GitHub repository.
-2. Under the "Assets" dropdown of the latest release, click on `BlenderGemini.py` to download it directly.
-3. Open the downloaded `BlenderGemini.py` file with any basic text editor (like **Notepad** on Windows or **TextEdit** on Mac).
-4. Look near the top of the file for **Line 22**, which looks exactly like this:
-
-   ```python
-   DEFAULT_API_KEY = "ENTER_YOUR_API_KEY_HERE"
-5. Replace ENTER_YOUR_API_KEY_HERE with the API key you copied from Google. (Make sure you keep the quotation marks "" around your key).
-6. Save the file and close the text editor.
-
-### Step 3: Install in Blender
-1. Open Blender.
-2. Go to **Edit > Preferences > Add-ons**.
-3. Click the **Install...** button at the top right.
-4. Find and select your modified `BlenderGemini.py` file and click **Install Add-on**.
-5. Tick the checkbox next to **Interface: Gemini AI Chat Pro** (or Blender Gemini) to enable it.
+- **Context Awareness:** Toggle what the AI knows about your scene to get specific answers like *"Why is my mesh so heavy?"* or *"Help me clean up these modifiers."*
+- **Silent Handshake:** Professional "Warm Start" initialization to ensure the API is ready and the AI understands its role before you ask your first question.
+- **Optimized for Scripting:** Generates valid `bpy` (Blender Python) code snippets tailored to your active object.
+- **Zero Dependencies:** Uses Blender's built-in libraries. No pip, no requests, no headache.
+- **Pro & Free Tier Support:** Switch between Free models (Gemini 2.5 Flash) and Pro models with custom API keys.
 
 ---
 
-## 💻 How to Use
+## 🛠️ How to Install
 
-1. Go to your **3D Viewport** in Blender.
-2. Press **`N`** on your keyboard to open the right Sidebar.
-3. Click on the new **Gemini AI** tab.
-4. **Select a Model:** 
-   * *Recommendation:* Choose **Gemini 2.5 Flash Lite** from the dropdown. It is incredibly fast and gives you a massive 1,000 requests/day for free!
-5. Type your question in the text box at the bottom and click **SEND**.
-
-*(Note: Blender's interface might freeze for a second while waiting for the AI's response. This is completely normal.)*
-
----
-
-## ⚠️ Troubleshooting & FAQ
-
-**Error: "Valid API Key not found!"**
-You forgot to paste your API key into the `.py` file before installing. Disable the add-on, edit the file, save it, and reinstall.
-
-**Error: "QUOTA ERROR / Limit Exceeded"**
-Google has strict rate limits for free models. If you send messages too fast (more than 15 per minute), you will get this error. Just wait 5-10 seconds and try again. If your daily limit is completely zeroed out, make sure you are using the `gemini-2.5-flash-lite` model from the dropdown.
-
-**Can I use Paid Models?**
-Yes! Check the **"Use Paid (Pro) API"** box in the add-on settings. A new menu will appear allowing you to enter a billed API key and select advanced reasoning models.
+1. **Get an API Key:** Create a free key at [Google AI Studio](https://aistudio.google.com/).
+2. **Download:** Get the `BlenderGemini.py` file from the [Latest Release](../../releases/latest).
+3. **Configure:** Open the `.py` file in a text editor and paste your key at `DEFAULT_API_KEY = "YOUR_KEY_HERE"`.
+4. **Install:** 
+   - Open Blender > Edit > Preferences > Add-ons > Install.
+   - Select `BlenderGemini.py`.
+   - Enable **Interface: Blender Gemini AI**.
 
 ---
 
-## 🤝 Contributing
-Feel free to fork this project, submit pull requests, or report issues in the "Issues" tab. Let's make the best AI integration for Blender together!
+## 💻 Usage
 
-## 📜 License
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** - see the [LICENSE](LICENSE) file for details. This ensures the add-on remains free and open-source forever.
+1. Open the Sidebar in the 3D Viewport (**N key**).
+2. Click the **Gemini AI** tab.
+3. Click **"Wake Up Gemini"** to initialize the assistant.
+4. **Configure Awareness:** Check the boxes (Scene, Object, etc.) to share context with the AI.
+5. **Chat:** Type your question and hit **SEND**.
+
+*Tip: Use the **X** button next to "AI Awareness" to quickly disable all context sharing for a generic chat experience.*
+
+---
+
+## 📜 Credits & License
+Developed by **[VittorioCodes](https://github.com/VittorioCodes)**.
+
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. Free to use, free to modify, open-source forever.
+
+---
+*Note: If Blender freezes for a few seconds during a request, it is waiting for the Google API response. This is expected behavior.*
