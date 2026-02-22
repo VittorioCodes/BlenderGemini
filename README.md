@@ -1,4 +1,4 @@
-# 🤖 Blender Gemini AI (v1.1.0)
+# 🤖 Blender Gemini (v1.1.0)
 
 ![Blender Version](https://img.shields.io/badge/Blender-3.0+-orange.svg)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
@@ -37,7 +37,7 @@ Your AI assistant is no longer blind! It can now see:
 4. **Install:** 
    - Open Blender > Edit > Preferences > Add-ons > Install.
    - Select `BlenderGemini.py`.
-   - Enable **Interface: Blender Gemini AI**.
+   - Enable **Interface: Blender Gemini**.
 
 ---
 
