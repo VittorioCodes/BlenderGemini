@@ -37,14 +37,16 @@ Even if you have never used an add-on or an API before, just follow these simple
 3. Click on **"Get API key"** (usually on the left menu) and create a new key.
 4. Copy this key. Keep it secret!
 
-### Step 2: Prepare the Add-on
-1. Download the `BlenderGemini.py` file from this repository. (Click the file -> Click the "Raw" button -> Right-click and "Save as...").
-2. Open the downloaded `BlenderGemini.py` file with any basic text editor (like **Notepad** on Windows or **TextEdit** on Mac).
-3. Look near the top of the file for **Line 22**, which looks exactly like this:
+### Step 2: Download & Prepare the Add-on
+1. Go to the **[Releases](../../releases/latest)** section on the right side of this GitHub repository.
+2. Under the "Assets" dropdown of the latest release, click on `BlenderGemini.py` to download it directly.
+3. Open the downloaded `BlenderGemini.py` file with any basic text editor (like **Notepad** on Windows or **TextEdit** on Mac).
+4. Look near the top of the file for **Line 22**, which looks exactly like this:
+
    ```python
    DEFAULT_API_KEY = "ENTER_YOUR_API_KEY_HERE"
-4. Replace `ENTER_YOUR_API_KEY_HERE` with the API key you copied from Google. *(Make sure you keep the quotation marks `""` around your key).*
-5. **Save** the file and close the text editor.
+5. Replace ENTER_YOUR_API_KEY_HERE with the API key you copied from Google. (Make sure you keep the quotation marks "" around your key).
+6. Save the file and close the text editor.
 
 ### Step 3: Install in Blender
 1. Open Blender.
